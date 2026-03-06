@@ -1,6 +1,3 @@
-// Vercel serverless function — Lemon Squeezy webhook
-// POST /api/webhook
-
 import crypto from 'crypto';
 
 const KV_URL = process.env.KV_REST_API_URL;
@@ -14,52 +11,48 @@ async function kvSet(key, value) {
   });
 }
 
-function generateKey() {
-  return 'DS-' + crypto.randomBytes(16).toString('hex').toUpperCase();
+export const config = { api: { bodyParser: false } };
+
+async function getRawBody(req) {
+  return new Promise((resolve, reject) => {
+    let data = '';
+    req.on('data', chunk => data += chunk);
+    req.on('end', () => resolve(data));
+    req.on('error', reject);
+  });
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).end();
-  }
+  if (req.method !== 'POST') return res.status(405).end();
 
-  // Verify Lemon Squeezy signature
+  const rawBody = await getRawBody(req);
   const secret = process.env.LEMON_SQUEEZY_WEBHOOK_SECRET;
   const signature = req.headers['x-signature'];
-  const body = JSON.stringify(req.body);
-  const hmac = crypto.createHmac('sha256', secret).update(body).digest('hex');
+  const hmac = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
 
   if (signature !== hmac) {
-    return res.status(401).json({ error: 'Invalid signature' });
+    return res.status(401).json({ error: 'Invalid signature', got: signature, expected: hmac });
   }
 
-  const event = req.body;
+  const event = JSON.parse(rawBody);
   const eventName = event.meta?.event_name;
-
-  if (eventName !== 'order_created') {
-    return res.status(200).json({ ok: true });
-  }
+  if (eventName !== 'order_created') return res.status(200).json({ ok: true });
 
   const order = event.data?.attributes;
   const email = order?.user_email;
-  const variantId = String(order?.first_order_item?.variant_id);
 
-  const planMap = {
-    [process.env.VARIANT_SOLO]: 'solo',
-    [process.env.VARIANT_TEAM]: 'team',
-    [process.env.VARIANT_UNLIMITED]: 'unlimited',
-  };
-  const plan = planMap[variantId] || 'team';
+  // Use the LS license key directly as our key
+  const licenseKey = event.data?.relationships?.license_keys?.data?.[0]?.id
+    || event.meta?.custom_data?.license_key
+    || `DS-${crypto.randomBytes(8).toString('hex').toUpperCase()}`;
 
-  const key = generateKey();
-  await kvSet(`license:${key}`, {
+  await kvSet(`license:${licenseKey}`, {
     email,
-    plan,
+    plan: 'team',
     createdAt: new Date().toISOString(),
     orderId: event.data?.id,
   });
 
-  console.log(`New license: ${key} for ${email} (${plan})`);
-
-  return res.status(200).json({ ok: true, key });
+  console.log(`New license: ${licenseKey} for ${email}`);
+  return res.status(200).json({ ok: true });
 }
