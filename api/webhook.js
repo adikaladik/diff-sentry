@@ -2,7 +2,17 @@
 // POST /api/webhook
 
 import crypto from 'crypto';
-import { kv } from '@vercel/kv';
+
+const KV_URL = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+
+async function kvSet(key, value) {
+  await fetch(`${KV_URL}/set/${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(JSON.stringify(value)),
+  });
+}
 
 function generateKey() {
   return 'DS-' + crypto.randomBytes(16).toString('hex').toUpperCase();
@@ -26,16 +36,14 @@ export default async function handler(req, res) {
   const event = req.body;
   const eventName = event.meta?.event_name;
 
-  // Only handle successful orders
   if (eventName !== 'order_created') {
     return res.status(200).json({ ok: true });
   }
 
   const order = event.data?.attributes;
   const email = order?.user_email;
-  const variantId = order?.first_order_item?.variant_id;
+  const variantId = String(order?.first_order_item?.variant_id);
 
-  // Map variant to plan
   const planMap = {
     [process.env.VARIANT_SOLO]: 'solo',
     [process.env.VARIANT_TEAM]: 'team',
@@ -43,19 +51,15 @@ export default async function handler(req, res) {
   };
   const plan = planMap[variantId] || 'team';
 
-  // Generate license key
   const key = generateKey();
-  await kv.set(`license:${key}`, {
+  await kvSet(`license:${key}`, {
     email,
     plan,
     createdAt: new Date().toISOString(),
     orderId: event.data?.id,
   });
 
-  // Also store by email for lookup
-  await kv.lpush(`licenses:${email}`, key);
-
   console.log(`New license: ${key} for ${email} (${plan})`);
 
-  return res.status(200).json({ ok: true });
+  return res.status(200).json({ ok: true, key });
 }

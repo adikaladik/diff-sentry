@@ -1,7 +1,24 @@
 // Vercel serverless function — license key validation
 // POST /api/validate { key, repo }
 
-const MASTER_KEYS = process.env.MASTER_KEYS ? process.env.MASTER_KEYS.split(',') : [];
+const KV_URL = process.env.KV_REST_API_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+
+async function kvGet(key) {
+  const res = await fetch(`${KV_URL}/get/${encodeURIComponent(key)}`, {
+    headers: { Authorization: `Bearer ${KV_TOKEN}` },
+  });
+  const data = await res.json();
+  return data.result ? JSON.parse(data.result) : null;
+}
+
+async function kvSet(key, value) {
+  await fetch(`${KV_URL}/set/${encodeURIComponent(key)}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${KV_TOKEN}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(JSON.stringify(value)),
+  });
+}
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -14,17 +31,15 @@ export default async function handler(req, res) {
     return res.status(400).json({ valid: false, error: 'No license key provided' });
   }
 
-  // Check against Vercel KV store
   try {
-    const { kv } = await import('@vercel/kv');
-    const licenseData = await kv.get(`license:${key}`);
+    const licenseData = await kvGet(`license:${key}`);
 
     if (!licenseData) {
       return res.status(403).json({ valid: false, error: 'Invalid license key' });
     }
 
-    // Log usage
-    await kv.set(`license:${key}`, {
+    // Update last used
+    await kvSet(`license:${key}`, {
       ...licenseData,
       lastUsed: new Date().toISOString(),
       lastRepo: repo,
@@ -32,10 +47,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ valid: true, plan: licenseData.plan });
   } catch (err) {
-    // If KV not available, check master keys
-    if (MASTER_KEYS.includes(key)) {
-      return res.status(200).json({ valid: true, plan: 'unlimited' });
-    }
+    console.error('Validation error:', err);
     return res.status(500).json({ valid: false, error: 'Validation service unavailable' });
   }
 }
