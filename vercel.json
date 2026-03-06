@@ -1,5 +1,9 @@
 {
-  "buildCommand": "",
-  "outputDirectory": "landing",
-  "installCommand": ""
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/(.*)", "dest": "/landing/$1" }
+  ]
 }
