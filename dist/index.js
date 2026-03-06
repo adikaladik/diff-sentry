@@ -30074,12 +30074,15 @@ function analyzeFile(file) {
  * @param {string} diffText - Raw git diff output
  * @returns {object} Analysis result with per-file risks and summary
  */
-function analyzeDiff(diffText) {
+function analyzeDiff(diffText, options = {}) {
+  const { fileLimit } = options;
   if (!diffText || !diffText.trim()) {
     return { files: [], summary: { high: 0, medium: 0, low: 0, total: 0 }, safe: true };
   }
 
-  const files = parseDiff(diffText);
+  let files = parseDiff(diffText);
+  const truncated = fileLimit && files.length > fileLimit;
+  if (truncated) files = files.slice(0, fileLimit);
   const analyzed = files.map(analyzeFile);
 
   const risky = analyzed.filter(f => f.risks.length > 0);
@@ -30096,6 +30099,8 @@ function analyzeDiff(diffText) {
     riskyFiles: risky,
     summary,
     safe: summary.high === 0 && summary.medium === 0,
+    truncated: truncated || false,
+    fileLimit: fileLimit || null,
   };
 }
 
@@ -30133,6 +30138,10 @@ All **${summary.total}** changed files look clean. No auth, config, infra, or da
 
   if (summary.high > 0) {
     lines.push(`> 🔴 **${summary.high} HIGH-risk file${summary.high > 1 ? 's' : ''}** require your attention before merging.\n`);
+  }
+
+  if (analysis.truncated) {
+    lines.push(`> ⚠️ **Free mode:** Only the first ${analysis.fileLimit} files were scanned. [Get a license](https://diffsentry.dev) to scan all files.\n`);
   }
 
   lines.push(`**${summary.riskyFiles}** of **${summary.total}** changed files flagged:\n`);
@@ -32100,16 +32109,24 @@ async function run() {
     const failOnHigh = core.getInput('fail-on-high') === 'true';
     const apiUrl = core.getInput('api-url') || 'https://api.diffsentry.dev';
 
-    // Validate license key (skip in free/trial mode)
+    // Validate license key
+    let licensed = false;
+    let plan = 'free';
+
     if (licenseKey) {
       try {
-        const res = await fetch(`${apiUrl}/v1/validate`, {
+        const res = await fetch(`${apiUrl}/api/validate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: licenseKey, repo: process.env.GITHUB_REPOSITORY }),
+          signal: AbortSignal.timeout(5000),
         });
         const data = await res.json();
-        if (!data.valid) {
+        if (data.valid) {
+          licensed = true;
+          plan = data.plan || 'team';
+          core.info(`Diff Sentry: License valid (${plan} plan).`);
+        } else {
           core.warning(`Diff Sentry: Invalid license key. Running in free mode (limited to 3 files).`);
         }
       } catch {
@@ -32118,6 +32135,8 @@ async function run() {
     } else {
       core.info('Diff Sentry: No license key provided. Running in free mode (limited to 3 files).');
     }
+
+    const FREE_FILE_LIMIT = 3;
 
     // Get the diff
     const context = github.context;
@@ -32143,8 +32162,8 @@ async function run() {
       }
     }
 
-    // Analyze
-    const analysis = analyzeDiff(diffText);
+    // Analyze (limit files in free mode)
+    const analysis = analyzeDiff(diffText, { fileLimit: licensed ? null : FREE_FILE_LIMIT });
     core.info(`Diff Sentry: Analyzed ${analysis.summary.total} files. ${analysis.summary.riskyFiles || 0} flagged.`);
 
     // Set outputs

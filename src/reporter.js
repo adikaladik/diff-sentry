@@ -26,6 +26,10 @@ All **${summary.total}** changed files look clean. No auth, config, infra, or da
     lines.push(`> 🔴 **${summary.high} HIGH-risk file${summary.high > 1 ? 's' : ''}** require your attention before merging.\n`);
   }
 
+  if (analysis.truncated) {
+    lines.push(`> ⚠️ **Free mode:** Only the first ${analysis.fileLimit} files were scanned. [Get a license](https://diffsentry.dev) to scan all files.\n`);
+  }
+
   lines.push(`**${summary.riskyFiles}** of **${summary.total}** changed files flagged:\n`);
 
   // Per-file breakdown

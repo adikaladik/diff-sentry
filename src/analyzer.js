@@ -147,12 +147,15 @@ function analyzeFile(file) {
  * @param {string} diffText - Raw git diff output
  * @returns {object} Analysis result with per-file risks and summary
  */
-function analyzeDiff(diffText) {
+function analyzeDiff(diffText, options = {}) {
+  const { fileLimit } = options;
   if (!diffText || !diffText.trim()) {
     return { files: [], summary: { high: 0, medium: 0, low: 0, total: 0 }, safe: true };
   }
 
-  const files = parseDiff(diffText);
+  let files = parseDiff(diffText);
+  const truncated = fileLimit && files.length > fileLimit;
+  if (truncated) files = files.slice(0, fileLimit);
   const analyzed = files.map(analyzeFile);
 
   const risky = analyzed.filter(f => f.risks.length > 0);
@@ -169,6 +172,8 @@ function analyzeDiff(diffText) {
     riskyFiles: risky,
     summary,
     safe: summary.high === 0 && summary.medium === 0,
+    truncated: truncated || false,
+    fileLimit: fileLimit || null,
   };
 }
 

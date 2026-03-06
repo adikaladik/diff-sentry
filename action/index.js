@@ -14,16 +14,24 @@ async function run() {
     const failOnHigh = core.getInput('fail-on-high') === 'true';
     const apiUrl = core.getInput('api-url') || 'https://api.diffsentry.dev';
 
-    // Validate license key (skip in free/trial mode)
+    // Validate license key
+    let licensed = false;
+    let plan = 'free';
+
     if (licenseKey) {
       try {
-        const res = await fetch(`${apiUrl}/v1/validate`, {
+        const res = await fetch(`${apiUrl}/api/validate`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: licenseKey, repo: process.env.GITHUB_REPOSITORY }),
+          signal: AbortSignal.timeout(5000),
         });
         const data = await res.json();
-        if (!data.valid) {
+        if (data.valid) {
+          licensed = true;
+          plan = data.plan || 'team';
+          core.info(`Diff Sentry: License valid (${plan} plan).`);
+        } else {
           core.warning(`Diff Sentry: Invalid license key. Running in free mode (limited to 3 files).`);
         }
       } catch {
@@ -32,6 +40,8 @@ async function run() {
     } else {
       core.info('Diff Sentry: No license key provided. Running in free mode (limited to 3 files).');
     }
+
+    const FREE_FILE_LIMIT = 3;
 
     // Get the diff
     const context = github.context;
@@ -57,8 +67,8 @@ async function run() {
       }
     }
 
-    // Analyze
-    const analysis = analyzeDiff(diffText);
+    // Analyze (limit files in free mode)
+    const analysis = analyzeDiff(diffText, { fileLimit: licensed ? null : FREE_FILE_LIMIT });
     core.info(`Diff Sentry: Analyzed ${analysis.summary.total} files. ${analysis.summary.riskyFiles || 0} flagged.`);
 
     // Set outputs
