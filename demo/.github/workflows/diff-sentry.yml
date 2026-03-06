@@ -1,0 +1,23 @@
+name: Diff Sentry Review
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  diff-sentry:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Diff Sentry
+        uses: diff-sentry/action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          license-key: ${{ secrets.DIFF_SENTRY_KEY }}
+          fail-on-high: false  # set to true to block merges on HIGH risk

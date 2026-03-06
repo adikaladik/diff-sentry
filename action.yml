@@ -1,0 +1,38 @@
+name: 'Diff Sentry'
+description: 'Flags risky AI-generated code changes — auth, config, env, infra, DB migrations — before they merge.'
+author: 'Diff Sentry'
+
+branding:
+  icon: 'shield'
+  color: 'red'
+
+inputs:
+  github-token:
+    description: 'GitHub token for posting PR comments'
+    required: true
+    default: ${{ github.token }}
+  license-key:
+    description: 'Your Diff Sentry license key (get one at diffsentry.dev)'
+    required: false
+  fail-on-high:
+    description: 'Fail the check if HIGH-risk files are detected (blocks merge)'
+    required: false
+    default: 'false'
+  api-url:
+    description: 'Diff Sentry API URL (leave default)'
+    required: false
+    default: 'https://api.diffsentry.dev'
+
+outputs:
+  high-risk-count:
+    description: 'Number of HIGH-risk files detected'
+  medium-risk-count:
+    description: 'Number of MEDIUM-risk files detected'
+  safe:
+    description: 'true if no HIGH or MEDIUM risk files found'
+  risky-files:
+    description: 'JSON array of risky file paths'
+
+runs:
+  using: 'node20'
+  main: 'action/index.js'

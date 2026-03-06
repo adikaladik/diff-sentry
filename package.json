@@ -1,0 +1,19 @@
+{
+  "name": "diff-sentry",
+  "version": "1.0.0",
+  "description": "Flags risky AI-generated code changes before they merge.",
+  "main": "action/index.js",
+  "scripts": {
+    "test": "node test.js",
+    "build": "ncc build action/index.js -o dist --source-map --license licenses.txt"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.1"
+  },
+  "keywords": ["github-action", "security", "ai", "code-review", "diff"],
+  "license": "MIT"
+}
