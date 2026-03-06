@@ -1,9 +1,5 @@
 {
-  "buildCommand": "echo 'no build'",
+  "buildCommand": "",
   "outputDirectory": "landing",
-  "functions": {
-    "api/*.js": {
-      "runtime": "nodejs20.x"
-    }
-  }
+  "installCommand": ""
 }
